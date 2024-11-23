@@ -5,7 +5,15 @@ fn sdf_round_box(p: vec3f, b: vec3f, r: f32, quat: vec4f) -> f32
 
 fn sdf_sphere(p: vec3f, r: vec4f, quat: vec4f) -> f32
 {
-  return 0.01;
+    // Apply rotation using quaternion if needed
+    var rotated_p = rotate_vector(p, quat);
+    
+    // Scale the space - r.xyz contains the scale for each axis
+    var scaled_p = rotated_p * r.xyz;
+    
+    // Calculate distance from point to sphere center
+    // Note: r.w is the global scale/radius of the sphere
+    return (length(scaled_p) - r.w);
 }
 
 fn sdf_torus(p: vec3f, r: vec2f, quat: vec4f) -> f32

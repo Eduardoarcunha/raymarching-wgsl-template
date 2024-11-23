@@ -87,7 +87,7 @@ fn transform_p(p: vec3f, option: vec2f) -> vec3f
 
 fn scene(p: vec3f) -> vec4f // xyz = color, w = distance
 {
-    var d = mix(100.0, p.y, uniforms[17]);
+    var d = mix(100.0, p.y, uniforms[17]);  // Initial floor distance if enabled
 
     var spheresCount = i32(uniforms[2]);
     var boxesCount = i32(uniforms[3]);
@@ -98,20 +98,37 @@ fn scene(p: vec3f) -> vec4f // xyz = color, w = distance
 
     for (var i = 0; i < all_objects_count; i = i + 1)
     {
-      // get shape and shape order (shapesinfo)
-      // shapesinfo has the following format:
-      // x: shape type (0: sphere, 1: box, 2: torus)
-      // y: shape index
-      // order matters for the operations, they're sorted on the CPU side
+        // Get the shape info for current object
+        var shape_info = shapesinfob[i];
+        var shape_type = shape_info.x;
+        var shape_index = i32(shape_info.y);
+        
+        // Get the actual shape data
+        var shape_data = shapesb[shape_index];
 
-      // call transform_p and the sdf for the shape
-      // call op function with the shape operation
+        var _quat = quaternion_from_euler(shape_data.rotation.xyz);
 
-      // op format:
-      // x: operation (0: union, 1: subtraction, 2: intersection)
-      // y: k value
-      // z: repeat mode (0: normal, 1: repeat)
-      // w: repeat offset
+        
+        // Transform the point relative to shape position
+        var transformed_p = p - (shape_data.transform.xyz + shape_data.transform_animated.xyz);
+        
+        // Apply repeat transformation if enabled
+        transformed_p = transform_p(transformed_p, shape_data.op.zw);
+        
+        // Variable to store the distance for this shape
+        var shape_distance = 0.0;
+        
+        // Calculate distance based on shape type
+        if (shape_type <= 1.0)
+        {
+          shape_distance = sdf_sphere(transformed_p, shape_data.radius, _quat);
+        } else {
+          shape_distance = MAX_DIST;
+        }
+
+        let res = vec4f(shape_data.color.xyz,shape_distance);
+        result = res; // assign color and distance 
+        
     }
 
     return result;
@@ -128,11 +145,31 @@ fn march(ro: vec3f, rd: vec3f) -> march_output
   
   for (var i = 0; i < max_marching_steps; i = i + 1)
   {
-      // raymarch algorithm
-      // call scene function and march
-      // if the depth is greater than the max distance or the distance is less than the epsilon, break
+      // Get current position along the ray
+      var current = ro + rd * depth;
+      
+      // Get the scene distance at this point
+      var scene_res = scene(current);
+      var dist = scene_res.w;
+      
+      // Check if we've hit something
+      if (dist < EPSILON) {
+          // We hit something! Return the color and depth
+          color = scene_res.xyz;
+          return march_output(color, depth, false);
+      }
+      
+      // Check if we've gone too far
+      if (depth > MAX_DIST) {
+          // We didn't hit anything, return background
+          return march_output(color, depth, false);
+      }
+      
+      // Move along the ray by the safe distance (dist)
+      depth += dist * march_step;
   }
 
+  // If we run out of steps, return background
   return march_output(color, depth, false);
 }
 
@@ -229,6 +266,7 @@ fn preprocess(@builtin(global_invocation_id) id : vec3u)
   {
     return;
   }
+  return;
 
   // optional: performance boost
   // Do all the transformations here and store them in the buffer since this is called only once per object and not per pixel
@@ -237,28 +275,41 @@ fn preprocess(@builtin(global_invocation_id) id : vec3u)
 @compute @workgroup_size(THREAD_COUNT, THREAD_COUNT, 1)
 fn render(@builtin(global_invocation_id) id : vec3u)
 {
-  // unpack data
-  var fragCoord = vec2f(f32(id.x), f32(id.y));
-  var rez = vec2(uniforms[1]);
-  var time = uniforms[0];
+    // unpack data
+    var fragCoord = vec2f(f32(id.x), f32(id.y));
+    var rez = vec2(uniforms[1]);
+    var time = uniforms[0];
 
-  // camera setup
-  var lookfrom = vec3(uniforms[6], uniforms[7], uniforms[8]);
-  var lookat = vec3(uniforms[9], uniforms[10], uniforms[11]);
-  var camera = set_camera(lookfrom, lookat, 0.0);
-  var ro = lookfrom;
+    // camera setup
+    var lookfrom = vec3(uniforms[6], uniforms[7], uniforms[8]);
+    var lookat = vec3(uniforms[9], uniforms[10], uniforms[11]);
+    var camera = set_camera(lookfrom, lookat, 0.0);
+    var ro = lookfrom;
 
-  // get ray direction
-  var uv = (fragCoord - 0.5 * rez) / rez.y;
-  uv.y = -uv.y;
-  var rd = camera * normalize(vec3(uv, 1.0));
+    // get ray direction
+    var uv = (fragCoord - 0.5 * rez) / rez.y;
+    uv.y = -uv.y;
+    var rd = camera * normalize(vec3(uv, 1.0));
 
-  // call march function and get the color/depth
-  // move ray based on the depth
-  // get light
-  var color = vec3f(1.0);
-  
-  // display the result
-  color = linear_to_gamma(color);
-  fb[mapfb(id.xy, uniforms[1])] = vec4(color, 1.0);
+    // call march function and get the color/depth
+    var march_result = march(ro, rd);
+
+    // Get current position for lighting calculation
+    var current = ro + rd * march_result.depth;
+
+    // If we hit nothing (depth >= MAX_DIST), show background
+    var color = march_result.color;
+    // if (march_result.depth >= MAX_DIST) {
+    //     var light_position = vec3f(uniforms[13], uniforms[14], uniforms[15]);
+    //     var sun_color = int_to_rgb(i32(uniforms[16]));
+    //     color = get_ambient_light(light_position, sun_color, rd);
+    // } else {
+    //     // We hit something, calculate lighting
+    //     // color = get_light(current, march_result.color, rd);
+    //     color = march_result.color;
+    // }
+    
+    // display the result
+    color = linear_to_gamma(color);
+    fb[mapfb(id.xy, uniforms[1])] = vec4f(color, 1.0);
 }
