@@ -68,21 +68,28 @@ fn op(op: f32, d1: f32, d2: f32, col1: vec3f, col2: vec3f, k: f32) -> vec4f
   return op_smooth_intersection(d2, d1, col2, col1, k);
 }
 
-fn repeat(p: vec3f, offset: vec3f) -> vec3f
+fn repeat(p: vec3f, offset: vec3f) -> vec3f 
 {
-  return vec3f(0.0);
-}
-
-fn transform_p(p: vec3f, option: vec2f) -> vec3f
-{
-  // normal mode
-  if (option.x <= 1.0)
+  if (offset.x == 0.0 || offset.y == 0.0 || offset.z == 0.0)
   {
     return p;
   }
+    // Create offset vector for centering
+    var half_offset = 0.5 * offset;    
+    return modc(p + half_offset, offset) - half_offset;
+}
 
-  // return repeat / mod mode
-  return repeat(p, vec3f(option.y));
+fn transform_p(p: vec3f, option: vec2f) -> vec3f 
+{
+    // Normal mode (no transformation)
+    if (option.x <= 1.0) {
+        return p;
+    }
+    
+    // Repeat mode
+    // option.x > 1.0 indicates repeat mode is enabled
+    // option.y contains the repeat offset (same for all axes)
+    return repeat(p, vec3f(option.y));
 }
 
 fn scene(p: vec3f) -> vec4f // xyz = color, w = distance
