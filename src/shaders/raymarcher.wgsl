@@ -173,15 +173,45 @@ fn march(ro: vec3f, rd: vec3f) -> march_output
   return march_output(color, depth, false);
 }
 
-fn get_normal(p: vec3f) -> vec3f
+fn get_normal(p: vec3f) -> vec3f 
 {
-  return vec3f(0.0);
+    let eps = uniforms[23]; // Using your epsilon value from uniforms
+    let k = vec2f(1.0, -1.0);
+    
+    return normalize(k.xyy * scene(p + k.xyy * eps).w + 
+                    k.yyx * scene(p + k.yyx * eps).w + 
+                    k.yxy * scene(p + k.yxy * eps).w + 
+                    k.xxx * scene(p + k.xxx * eps).w);
 }
 
 // https://iquilezles.org/articles/rmshadows/
-fn get_soft_shadow(ro: vec3f, rd: vec3f, tmin: f32, tmax: f32, k: f32) -> f32
+fn get_soft_shadow(ro: vec3f, rd: vec3f, tmin: f32, tmax: f32, k: f32) -> f32 
 {
-  return 0.0;
+    // Initialize shadow multiplier
+    var res = 1.0;
+    
+    // Initialize distance traveled
+    var t = tmin;
+    
+    // March along shadow ray
+    for(var i = 0; i < 32; i = i + 1) {  // Using fixed iterations for stability
+        if(t >= tmax) { break; }
+        
+        // Get distance to scene
+        let h = scene(ro + rd * t).w;
+        
+        // Early exit if we hit something
+        if(h < uniforms[23]) { return 0.0; }
+        
+        // Calculate shadow softness
+        res = min(res, k * h / t);
+        
+        // Move along ray
+        t += h;
+    }
+    
+    // Clamp and return result
+    return clamp(res, 0.0, 1.0);
 }
 
 fn get_AO(current: vec3f, normal: vec3f) -> f32
@@ -216,27 +246,38 @@ fn get_ambient_light(light_pos: vec3f, sun_color: vec3f, rd: vec3f) -> vec3f
   return ambient;
 }
 
-fn get_light(current: vec3f, obj_color: vec3f, rd: vec3f) -> vec3f
+fn get_light(current: vec3f, obj_color: vec3f, rd: vec3f) -> vec3f 
 {
-  var light_position = vec3f(uniforms[13], uniforms[14], uniforms[15]);
-  var sun_color = int_to_rgb(i32(uniforms[16]));
-  var ambient = get_ambient_light(light_position, sun_color, rd);
-  var normal = get_normal(current);
+    var light_position = vec3f(uniforms[13], uniforms[14], uniforms[15]);
+    var sun_color = int_to_rgb(i32(uniforms[16]));
+    var ambient = get_ambient_light(light_position, sun_color, rd);
+    var normal = get_normal(current);
 
-  // calculate light based on the normal
-  // if the object is too far away from the light source, return ambient light
-  if (length(current) > uniforms[20] + uniforms[8])
-  {
-    return ambient;
-  }
+    // If the object is too far, return ambient
+    if (length(current) > uniforms[20] + uniforms[8]) {
+        return ambient;
+    }
 
-  // calculate the light intensity
-  // Use:
-  // - shadow
-  // - ambient occlusion (optional)
-  // - ambient light
-  // - object color
-  return ambient;
+    // Calculate light direction and distance
+    var light_dir = normalize(light_position - current);
+    var light_dist = length(light_position - current);
+
+    // Diffuse lighting
+    var diff = max(dot(normal, light_dir), 0.0);
+    
+    // Specular lighting
+    var ref_dir = reflect(-light_dir, normal);
+    
+    // Shadow calculation
+    var shadow = get_soft_shadow(current, light_dir, 0.1, light_dist, 32.0);
+    
+    // Ambient occlusion
+    var ao = get_AO(current, normal);
+    
+    // Combine all lighting components
+    var diffuse = obj_color * sun_color * diff;
+    
+    return (ambient * obj_color + (diffuse) * shadow) * ao;
 }
 
 fn set_camera(ro: vec3f, ta: vec3f, cr: f32) -> mat3x3<f32>
@@ -299,15 +340,15 @@ fn render(@builtin(global_invocation_id) id : vec3u)
 
     // If we hit nothing (depth >= MAX_DIST), show background
     var color = march_result.color;
-    // if (march_result.depth >= MAX_DIST) {
-    //     var light_position = vec3f(uniforms[13], uniforms[14], uniforms[15]);
-    //     var sun_color = int_to_rgb(i32(uniforms[16]));
-    //     color = get_ambient_light(light_position, sun_color, rd);
-    // } else {
-    //     // We hit something, calculate lighting
-    //     // color = get_light(current, march_result.color, rd);
-    //     color = march_result.color;
-    // }
+    if (march_result.depth >= MAX_DIST) {
+        var light_position = vec3f(uniforms[13], uniforms[14], uniforms[15]);
+        var sun_color = int_to_rgb(i32(uniforms[16]));
+        color = get_ambient_light(light_position, sun_color, rd);
+    } else {
+        // We hit something, calculate lighting
+        color = get_light(current, march_result.color, rd);
+        // color = march_result.color;
+    }
     
     // display the result
     color = linear_to_gamma(color);
