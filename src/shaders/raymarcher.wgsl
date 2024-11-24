@@ -121,15 +121,18 @@ fn scene(p: vec3f) -> vec4f // xyz = color, w = distance
         
         // Get the actual shape data
         var shape_data = shapesb[shape_index];
-
-        var _quat = quaternion_from_euler(shape_data.rotation.xyz);
-
         
+        var animated_transform = shape_data.animate_transform.xyz * sin(uniforms[0] * shape_data.animate_transform.w);
+
         // Transform the point relative to shape position
-        var transformed_p = p - (shape_data.transform.xyz + shape_data.transform_animated.xyz);
+        var transformed_p = p - (shape_data.transform.xyz + animated_transform);
         
         // Apply repeat transformation if enabled
         transformed_p = transform_p(transformed_p, shape_data.op.zw);
+
+        var animated_rotation = shape_data.animate_rotation.xyz * sin(uniforms[0] * shape_data.animate_rotation.w);
+        var quat_animated = quaternion_from_euler(animated_rotation + shape_data.rotation.xyz);
+
         
         // Variable to store the distance for this shape
         var shape_distance = 0.0;
@@ -137,22 +140,18 @@ fn scene(p: vec3f) -> vec4f // xyz = color, w = distance
         // Calculate distance based on shape type
         if (shape_type < 1.0)
         {
-          shape_distance = sdf_sphere(transformed_p, shape_data.radius, _quat);
+          shape_distance = sdf_sphere(transformed_p, shape_data.radius, quat_animated);
         } else if (shape_type < 2.0)   {
-          shape_distance = sdf_round_box(transformed_p, shape_data.radius.xyz, shape_data.radius.w, _quat);
+          shape_distance = sdf_round_box(transformed_p, shape_data.radius.xyz, shape_data.radius.w, quat_animated);
         } else if (shape_type < 3.0)  {
-          shape_distance = sdf_torus(transformed_p, shape_data.radius.xy,  _quat);
+          shape_distance = sdf_torus(transformed_p, shape_data.radius.xy,  quat_animated);
         } else {
           shape_distance = MAX_DIST;
         }
 
         var res = vec4f(shape_data.color.xyz, shape_distance);
-        result = op(shape_data.op.x, result.w, res.w, result.xyz, res.xyz, shape_data.op.y);
+        result = op(shape_data.op.x, result.w, res.w, result.xyz, shape_data.color.xyz, shape_data.op.y);
 
-        // if (i == 0)
-        // {
-        //   result = res; 
-        // }   
     }
 
     return result;
@@ -315,7 +314,23 @@ fn set_camera(ro: vec3f, ta: vec3f, cr: f32) -> mat3x3<f32>
 
 fn animate(val: vec3f, time_scale: f32, offset: f32) -> vec3f
 {
-  return vec3f(0.0);
+    // If animation values are 0, return zero vector (no animation)
+    if (all(val == vec3f(0.0))) {
+        return vec3f(0.0);
+    }
+    
+    // Get the current time from uniforms
+    var time = uniforms[0];
+    
+    // Create smooth sine wave animation
+    // Each component can have different amplitude (val)
+    // time_scale controls speed
+    // offset allows for phase shifting
+    return vec3f(
+        val.x * sin(time * time_scale + offset),
+        val.y * sin(time * time_scale + offset),
+        val.z * sin(time * time_scale + offset)
+    );
 }
 
 @compute @workgroup_size(THREAD_COUNT, 1, 1)
