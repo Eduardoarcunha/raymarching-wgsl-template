@@ -34,20 +34,29 @@ struct march_output {
 
 fn op_smooth_union(d1: f32, d2: f32, col1: vec3f, col2: vec3f, k: f32) -> vec4f
 {
-  var k_eps = max(k, 0.0001);
-  return vec4f(col1, d1);
+    var k_eps = max(k, 0.0001);
+    var h = clamp(0.5 + 0.5 * (d2 - d1) / k_eps, 0.0, 1.0);
+    var d = mix(d2, d1, h) - k_eps * h * (1.0 - h);
+    var col = mix(col2, col1, h);
+    return vec4f(col, d);
 }
 
 fn op_smooth_subtraction(d1: f32, d2: f32, col1: vec3f, col2: vec3f, k: f32) -> vec4f
 {
-  var k_eps = max(k, 0.0001);
-  return vec4f(col1, d1);
+    var k_eps = max(k, 0.0001);
+    var h = clamp(0.5 - 0.5 * (d2 + d1) / k_eps, 0.0, 1.0);
+    var d = mix(d2, -d1, h) + k_eps * h * (1.0 - h);
+    var col = mix(col2, col1, h);
+    return vec4f(col, d);
 }
 
 fn op_smooth_intersection(d1: f32, d2: f32, col1: vec3f, col2: vec3f, k: f32) -> vec4f
 {
-  var k_eps = max(k, 0.0001);
-  return vec4f(col1, d1);
+    var k_eps = max(k, 0.0001);
+    var h = clamp(0.5 - 0.5 * (d2 - d1) / k_eps, 0.0, 1.0);
+    var d = mix(d2, d1, h) + k_eps * h * (1.0 - h);
+    var col = mix(col2, col1, h);
+    return vec4f(col, d);
 }
 
 fn op(op: f32, d1: f32, d2: f32, col1: vec3f, col2: vec3f, k: f32) -> vec4f
@@ -137,9 +146,13 @@ fn scene(p: vec3f) -> vec4f // xyz = color, w = distance
           shape_distance = MAX_DIST;
         }
 
-        let res = vec4f(shape_data.color.xyz,shape_distance);
-        result = res; // assign color and distance 
-        
+        var res = vec4f(shape_data.color.xyz, shape_distance);
+        result = op(shape_data.op.x, result.w, res.w, result.xyz, res.xyz, shape_data.op.y);
+
+        // if (i == 0)
+        // {
+        //   result = res; 
+        // }   
     }
 
     return result;
@@ -151,7 +164,7 @@ fn march(ro: vec3f, rd: vec3f) -> march_output
   var EPSILON = uniforms[23];
 
   var depth = 0.0;
-  var color = vec3f(0.0);
+  var color = vec3f(1.0);
   var march_step = uniforms[22];
   
   for (var i = 0; i < max_marching_steps; i = i + 1)
