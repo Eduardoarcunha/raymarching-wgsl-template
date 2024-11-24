@@ -122,7 +122,7 @@ fn scene(p: vec3f) -> vec4f // xyz = color, w = distance
         // Get the actual shape data
         var shape_data = shapesb[shape_index];
         
-        var animated_transform = shape_data.animate_transform.xyz * sin(uniforms[0] * shape_data.animate_transform.w);
+        var animated_transform = animate(shape_data.animate_transform.xyz, shape_data.animate_transform.w, 0.0);
 
         // Transform the point relative to shape position
         var transformed_p = p - (shape_data.transform.xyz + animated_transform);
@@ -130,7 +130,7 @@ fn scene(p: vec3f) -> vec4f // xyz = color, w = distance
         // Apply repeat transformation if enabled
         transformed_p = transform_p(transformed_p, shape_data.op.zw);
 
-        var animated_rotation = shape_data.animate_rotation.xyz * sin(uniforms[0] * shape_data.animate_rotation.w);
+        var animated_rotation = animate(shape_data.animate_rotation.xyz, shape_data.animate_rotation.w, 0.0);
         var quat_animated = quaternion_from_euler(animated_rotation + shape_data.rotation.xyz);
 
         
@@ -327,7 +327,7 @@ fn animate(val: vec3f, time_scale: f32, offset: f32) -> vec3f
     // time_scale controls speed
     // offset allows for phase shifting
     return vec3f(
-        val.x * sin(time * time_scale + offset),
+        val.x * -cos(time * time_scale + offset),
         val.y * sin(time * time_scale + offset),
         val.z * sin(time * time_scale + offset)
     );
