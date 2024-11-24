@@ -1,6 +1,13 @@
 fn sdf_round_box(p: vec3f, b: vec3f, r: f32, quat: vec4f) -> f32
 {
-  return 0.01;
+    // Apply rotation using quaternion
+    var rotated_p = rotate_vector(p, quat);
+    
+    // Calculate the distance
+    var d = abs(rotated_p) - b;
+    
+    // Return minimum of component-wise max with 0 and length of max of d with 0
+    return length(max(d, vec3f(0.0))) + min(max(d.x, max(d.y, d.z)), 0.0) - r;
 }
 
 fn sdf_sphere(p: vec3f, r: vec4f, quat: vec4f) -> f32
@@ -18,7 +25,14 @@ fn sdf_sphere(p: vec3f, r: vec4f, quat: vec4f) -> f32
 
 fn sdf_torus(p: vec3f, r: vec2f, quat: vec4f) -> f32
 {
-  return 0.01;
+    // Apply rotation using quaternion
+    var rotated_p = rotate_vector(p, quat);
+    
+    // Convert to 2D for torus calculation
+    var q = vec2f(length(rotated_p.xz) - r.x, rotated_p.y);
+    
+    // Return the final distance
+    return length(q) - r.y;
 }
 
 fn sdf_mandelbulb(p: vec3f) -> vec2f

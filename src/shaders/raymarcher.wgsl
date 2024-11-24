@@ -126,9 +126,13 @@ fn scene(p: vec3f) -> vec4f // xyz = color, w = distance
         var shape_distance = 0.0;
         
         // Calculate distance based on shape type
-        if (shape_type <= 1.0)
+        if (shape_type < 1.0)
         {
           shape_distance = sdf_sphere(transformed_p, shape_data.radius, _quat);
+        } else if (shape_type < 2.0)   {
+          shape_distance = sdf_round_box(transformed_p, shape_data.radius.xyz, shape_data.radius.w, _quat);
+        } else if (shape_type < 3.0)  {
+          shape_distance = sdf_torus(transformed_p, shape_data.radius.xy,  _quat);
         } else {
           shape_distance = MAX_DIST;
         }
