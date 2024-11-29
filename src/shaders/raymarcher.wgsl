@@ -386,7 +386,7 @@ fn render(@builtin(global_invocation_id) id : vec3u)
 
     if(march_result.outline) // If outline we add it
     {
-      color = vec3f(1.0)*outline_color;
+      color = vec3f(1.0) * outline_color;
     }
     
     color = linear_to_gamma(color);
