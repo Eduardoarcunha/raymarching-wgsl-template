@@ -61,19 +61,16 @@ fn op_smooth_intersection(d1: f32, d2: f32, col1: vec3f, col2: vec3f, k: f32) ->
 
 fn op(op: f32, d1: f32, d2: f32, col1: vec3f, col2: vec3f, k: f32) -> vec4f
 {
-  // union
   if (op < 1.0)
   {
     return op_smooth_union(d1, d2, col1, col2, k);
   }
 
-  // subtraction
   if (op < 2.0)
   {
     return op_smooth_subtraction(d2, d1, col2, col1, k);
   }
 
-  // intersection
   return op_smooth_intersection(d2, d1, col2, col1, k);
 }
 
@@ -83,61 +80,51 @@ fn repeat(p: vec3f, offset: vec3f) -> vec3f
   {
     return p;
   }
-    // Create offset vector for centering
+
     var half_offset = 0.5 * offset;    
     return modc(p + half_offset, offset) - half_offset;
 }
 
 fn transform_p(p: vec3f, option: vec2f) -> vec3f 
 {
-    // Normal mode (no transformation)
     if (option.x <= 1.0) {
         return p;
     }
     
-    // Repeat mode
-    // option.x > 1.0 indicates repeat mode is enabled
-    // option.y contains the repeat offset (same for all axes)
     return repeat(p, vec3f(option.y));
 }
 
 fn scene(p: vec3f) -> vec4f // xyz = color, w = distance
 {
-    var d = mix(100.0, p.y, uniforms[17]);  // Initial floor distance if enabled
+    var d = mix(100.0, p.y, uniforms[17]);
 
     var spheresCount = i32(uniforms[2]);
     var boxesCount = i32(uniforms[3]);
     var torusCount = i32(uniforms[4]);
+    var mandelbulb = i32(uniforms[18]);
+    var weirdThing = i32(uniforms[19]);
 
     var all_objects_count = spheresCount + boxesCount + torusCount;
     var result = vec4f(vec3f(1.0), d);
 
     for (var i = 0; i < all_objects_count; i = i + 1)
     {
-        // Get the shape info for current object
         var shape_info = shapesinfob[i];
         var shape_type = shape_info.x;
         var shape_index = i32(shape_info.y);
         
-        // Get the actual shape data
         var shape_data = shapesb[shape_index];
-        
+    
         var animated_transform = animate(shape_data.animate_transform.xyz, shape_data.animate_transform.w, 0.0);
-
-        // Transform the point relative to shape position
-        var transformed_p = p - (shape_data.transform.xyz + animated_transform);
-        
-        // Apply repeat transformation if enabled
+        var transformed_p = p - (shape_data.transform.xyz + animated_transform);        
         transformed_p = transform_p(transformed_p, shape_data.op.zw);
 
         var animated_rotation = animate(shape_data.animate_rotation.xyz, shape_data.animate_rotation.w, 0.0);
         var quat_animated = quaternion_from_euler(animated_rotation + shape_data.rotation.xyz);
 
         
-        // Variable to store the distance for this shape
         var shape_distance = 0.0;
         
-        // Calculate distance based on shape type
         if (shape_type < 1.0)
         {
           shape_distance = sdf_sphere(transformed_p, shape_data.radius, quat_animated);
@@ -154,51 +141,66 @@ fn scene(p: vec3f) -> vec4f // xyz = color, w = distance
 
     }
 
+    if (mandelbulb > 0)
+    {
+      var distance = sdf_mandelbulb(p);
+      result = vec4f(vec3f(0.0, .8, 0.1), distance.x);
+    }
+
+    if (weirdThing > 0)
+    {
+      var distance = sdf_weird_thing(p, 1.0);
+      result = vec4f(vec3f(0.0, .2, 0.8), distance);
+    }
+
     return result;
 }
 
 fn march(ro: vec3f, rd: vec3f) -> march_output
 {
+  var outline_width = uniforms[27];
   var max_marching_steps = i32(uniforms[5]);
   var EPSILON = uniforms[23];
 
   var depth = 0.0;
   var color = vec3f(1.0);
   var march_step = uniforms[22];
+  var min_dist = MAX_DIST;
+
   
   for (var i = 0; i < max_marching_steps; i = i + 1)
   {
-      // Get current position along the ray
+      // Position along the ray
       var current = ro + rd * depth;
       
       // Get the scene distance at this point
       var scene_res = scene(current);
       var dist = scene_res.w;
+
+      min_dist = min(dist, min_dist);
       
       // Check if we've hit something
       if (dist < EPSILON) {
-          // We hit something! Return the color and depth
           color = scene_res.xyz;
           return march_output(color, depth, false);
       }
       
-      // Check if we've gone too far
-      if (depth > MAX_DIST) {
-          // We didn't hit anything, return background
-          return march_output(color, depth, false);
+      // Check if we gone too far
+      if (depth > MAX_DIST) { // Gone too far
+          break;
       }
       
-      // Move along the ray by the safe distance (dist)
+      // Move along the ray
       depth += dist * march_step;
   }
 
-  // If we run out of steps, return background
-  return march_output(color, depth, false);
+  var outline = (uniforms[26] > 0) && (min_dist < outline_width);
+  return march_output(color, depth, outline);
 }
 
 fn get_normal(p: vec3f) -> vec3f 
 {
-    let eps = uniforms[23]; // Using your epsilon value from uniforms
+    let eps = uniforms[23];
     let k = vec2f(1.0, -1.0);
     
     return normalize(k.xyy * scene(p + k.xyy * eps).w + 
@@ -210,30 +212,28 @@ fn get_normal(p: vec3f) -> vec3f
 // https://iquilezles.org/articles/rmshadows/
 fn get_soft_shadow(ro: vec3f, rd: vec3f, tmin: f32, tmax: f32, k: f32) -> f32 
 {
-    // Initialize shadow multiplier
-    var res = 1.0;
-    
-    // Initialize distance traveled
+    var res = 1.0;    
     var t = tmin;
     
     // March along shadow ray
-    for(var i = 0; i < 32; i = i + 1) {  // Using fixed iterations for stability
+    for (var i = 0; i < 32; i = i + 1) {
         if(t >= tmax) { break; }
         
         // Get distance to scene
         let h = scene(ro + rd * t).w;
         
         // Early exit if we hit something
-        if(h < uniforms[23]) { return 0.0; }
+        if(h < uniforms[23])
+        { 
+          return 0.0;
+        }
         
-        // Calculate shadow softness
         res = min(res, k * h / t);
         
         // Move along ray
         t += h;
     }
     
-    // Clamp and return result
     return clamp(res, 0.0, 1.0);
 }
 
@@ -319,13 +319,8 @@ fn animate(val: vec3f, time_scale: f32, offset: f32) -> vec3f
         return vec3f(0.0);
     }
     
-    // Get the current time from uniforms
     var time = uniforms[0];
     
-    // Create smooth sine wave animation
-    // Each component can have different amplitude (val)
-    // time_scale controls speed
-    // offset allows for phase shifting
     return vec3f(
         val.x * -cos(time * time_scale + offset),
         val.y * sin(time * time_scale + offset),
@@ -359,6 +354,8 @@ fn render(@builtin(global_invocation_id) id : vec3u)
     var fragCoord = vec2f(f32(id.x), f32(id.y));
     var rez = vec2(uniforms[1]);
     var time = uniforms[0];
+    var outline_color = uniforms[28];
+
 
     // camera setup
     var lookfrom = vec3(uniforms[6], uniforms[7], uniforms[8]);
@@ -384,12 +381,14 @@ fn render(@builtin(global_invocation_id) id : vec3u)
         var sun_color = int_to_rgb(i32(uniforms[16]));
         color = get_ambient_light(light_position, sun_color, rd);
     } else {
-        // We hit something, calculate lighting
         color = get_light(current, march_result.color, rd);
-        // color = march_result.color;
+    }
+
+    if(march_result.outline) // If outline we add it
+    {
+      color = vec3f(1.0)*outline_color;
     }
     
-    // display the result
     color = linear_to_gamma(color);
     fb[mapfb(id.xy, uniforms[1])] = vec4f(color, 1.0);
 }
