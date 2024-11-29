@@ -393,7 +393,7 @@ async function Outline()
 		softShadowK: 0.24,
 		marchingStep: 1,
 		outlinePostProcess: 1,
-		outlineWidth: 0.04,
+		outlineWidth: .04,
 		sunColor: [0.9294117647058824, 1, 0.7019607843137254],
 		backgroundColor2: [0.7, 0.75, 0.85],
 		backgroundColor3: [0.12941176470588237, 0.12941176470588237, 0.12941176470588237],
@@ -451,3 +451,39 @@ async function Weird()
 }
 
 export { getAvailableScene };
+
+async function Atom() {
+    return {
+        spheres: [
+            new Shape("Sphere", [0, 1, 0, 0], [1, 1, 1, 0.3], [0, 0, 0, 0], [0, 0.2, 0.0, 0.0], 
+                     [0.9, 0.4, 1, 0], [0, 0, 0, 0], [0, 0, 0, 0]),
+        ],
+        toruses: [
+            new Shape("Torus", [0, 1, 0, 0], [1.5, 0.02, 0.0, 0.0], [0, 0, 0, 0], [0, 0.01, 0.0, 0.0], 
+                     [1, 0.2, 0.8, 0], [0.3, 0.3, 0.3, 1], [1, 1, 0.5, 1]),
+            
+			new Shape("Torus", [0, 1, 0, 0], [0.8, 0.02, 0.0, 0.0], [-0.3, 0.5, 0.8, 0], [0, 0.01, 0.0, 0.0], 
+			[0.2, 1, 0.6, 0], [0, 0, 0, 0], [1, -0.5, 1, 1.4]),
+						
+			new Shape("Torus", [0, 1, 0, 0], [1.5, 0.02, 0.0, 0.0], [0.7, 1.1, 0.7, 0], [0, 0.01, 0.0, 0.0], 
+						[.18, 0.31, 1, 0], [0, 0, 0, 0], [-0.5, 1, 0.5, 0.9]),
+			
+            new Shape("Torus", [0, 1, 0, 0], [2.0, 0.02, 0.0, 0.0], [0.2, -0.4, 1.0, 0], [0, 0.01, 0.0, 0.0], 
+                     [1, 0.6, 0.1, 0], [0, 0, 0, 0], [0.6, 0.6, -0.6, 1.6]),
+        ],
+        boxes: [],
+        backgroundColor: [0.02, 0.02, 0.8],
+        maxMarchingSteps: 100,
+        showFloor: 0,
+        mandelbulb: 0,
+        weirdScene: 0,
+        farPlane: 100,
+        softShadowK: 0.24,
+        marchingStep: 1,
+        outlinePostProcess: 0,
+        outlineWidth: 0.04,
+        sunColor: [0.9, 0.8, 1],
+        backgroundColor2: [0.05, 0.03, 0.12],
+        backgroundColor3: [0.01, 0.01, 0.06],
+    };	
+}
